@@ -45,8 +45,11 @@ class BasePlaywrightComputer:
       - We also have extra browser actions: `goto(url)` and `back()`.
     """
 
-    environment: Literal["browser"] = "browser"
-    dimensions = (1024, 768)
+    def get_environment(self):
+        return "browser"
+
+    def get_dimensions(self):
+        return (1024, 768)
 
     def __init__(self):
         self._playwright = None
@@ -117,9 +120,11 @@ class BasePlaywrightComputer:
         self._page.mouse.move(x, y)
 
     def keypress(self, keys: List[str]) -> None:
-        for key in keys:
-            mapped_key = CUA_KEY_TO_PLAYWRIGHT_KEY.get(key.lower(), key)
-            self._page.keyboard.press(mapped_key)
+        mapped_keys = [CUA_KEY_TO_PLAYWRIGHT_KEY.get(key.lower(), key) for key in keys]
+        for key in mapped_keys:
+            self._page.keyboard.down(key)
+        for key in reversed(mapped_keys):
+            self._page.keyboard.up(key)
 
     def drag(self, path: List[Dict[str, int]]) -> None:
         if not path:
@@ -130,21 +135,18 @@ class BasePlaywrightComputer:
             self._page.mouse.move(point["x"], point["y"])
         self._page.mouse.up()
 
-    def get_current_url(self) -> str:
-        return self._page.url
-
     # --- Extra browser-oriented actions ---
     def goto(self, url: str) -> None:
         try:
-            self._page.goto(url)
+            return self._page.goto(url)
         except Exception as e:
             print(f"Error navigating to {url}: {e}")
 
     def back(self) -> None:
-        self._page.go_back()
+        return self._page.go_back()
 
     def forward(self) -> None:
-        self._page.go_forward()
+        return self._page.go_forward()
 
     # --- Subclass hook ---
     def _get_browser_and_page(self) -> tuple[Browser, Page]:
