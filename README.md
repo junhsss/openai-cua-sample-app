@@ -97,7 +97,6 @@ This sample app provides a set of implemented `Computer` examples, but feel free
 | `Browserbase`       | browserbase        | `browser` | Remote browser environment        | [Browserbase](https://www.browserbase.com/) API key in `.env`    |
 | `ScrapybaraBrowser` | scrapybara-browser | `browser` | Remote browser environment        | [Scrapybara](https://scrapybara.com/dashboard) API key in `.env` |
 | `ScrapybaraUbuntu`  | scrapybara-ubuntu  | `linux`   | Remote Ubuntu desktop environment | [Scrapybara](https://scrapybara.com/dashboard) API key in `.env` |
-| `Steel`             | steel              | `browser` | Remote browser API for AI agents  | [Steel](https://steel.dev) API key in `.env`                     |
 
 Using the CLI, you can run the sample app with different computer environments using the options listed above:
 
@@ -113,9 +112,9 @@ python cli.py --show --computer docker
 
 #### Contributed Computers
 
-| Computer | Option | Type | Description | Requirements |
-| -------- | ------ | ---- | ----------- | ------------ |
-| `tbd`    | tbd    | tbd  | tbd         | tbd          |
+| Computer | Option | Type      | Description                      | Requirements                                 |
+| -------- | ------ | --------- | -------------------------------- | -------------------------------------------- |
+| `Steel`  | steel  | `browser` | Remote browser API for AI agents | [Steel](https://steel.dev) API key in `.env` |
 
 > [!NOTE]  
 > If you've implemented a new computer, please add it to the "Contributed Computers" section of the README.md file. Clearly indicate any auth / signup requirements. See the [Contributing](#contributing) section for more details.

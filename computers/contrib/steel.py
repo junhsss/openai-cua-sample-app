@@ -1,10 +1,9 @@
 import os
-from typing import Tuple, Optional
+from typing import Tuple
 from playwright.sync_api import Browser, Page, Error as PlaywrightError
-from .base_playwright import BasePlaywrightComputer
-from dotenv import load_dotenv
-import base64
+from ..shared.base_playwright import BasePlaywrightComputer
 from steel import Steel
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -18,9 +17,12 @@ class SteelBrowser(BasePlaywrightComputer):
     STEEL_API_KEY=your_api_key
     STEEL_BASE_URL=http://localhost:3000 (or your self-hosted URL)
 
-    IMPORTANT: The `goto` tool, as defined in playwright_with_custom_functions.py, is strongly recommended when using the Steel computer.
+    IMPORTANT: This Steel computer requires the use of the `goto` tool defined in playwright_with_custom_functions.py.
     Make sure to include this tool in your configuration when using the Steel computer.
     """
+
+    def get_dimensions(self):
+        return self.dimensions
 
     def __init__(
         self,
@@ -39,10 +41,10 @@ class SteelBrowser(BasePlaywrightComputer):
         Args:
             width (int): Browser viewport width. Default is 1024.
             height (int): Browser viewport height. Default is 768.
-            use_proxy (bool): Whether to use Steel's proxy network (residential IPs). Default is False.
+            proxy (bool): Whether to use Steel's proxy network (residential IPs). Default is False.
             solve_captcha (bool): Whether to enable automatic CAPTCHA solving. Default is False.
             virtual_mouse (bool): Whether to show a virtual mouse cursor. Default is True.
-            session_timeout (int): Session timeout in milliseconds. Default is 5 minutes.
+            session_timeout (int): Session timeout in milliseconds. Default is 15 minutes.
             ad_blocker (bool): Whether to enable ad blocking. Default is True.
             start_url (str): The initial URL to navigate to. Default is "https://bing.com".
         """
@@ -69,35 +71,40 @@ class SteelBrowser(BasePlaywrightComputer):
         Returns:
             Tuple[Browser, Page]: A tuple containing the connected browser and page objects.
         """
-        # Create Steel session
+        # Create Steel session with specified parameters
         width, height = self.dimensions
-        self.session = self.client.sessions.create(
-            use_proxy=self.proxy,
-            solve_captcha=self.solve_captcha,
-            api_timeout=self.session_timeout,
-            block_ads=self.ad_blocker,
-            dimensions={"width": width, "height": height}
-        )
+        session_params = {
+            "use_proxy": self.proxy,
+            "solve_captcha": self.solve_captcha,
+            "api_timeout": self.session_timeout,
+            "block_ads": self.ad_blocker,
+            "dimensions": {"width": width, "height": height}
+        }
+        self.session = self.client.sessions.create(**session_params)
 
         print("Steel Session created successfully!")
         print(f"View live session at: {self.session.session_viewer_url}")
 
         # Connect to the remote browser using Steel's connection URL
         browser = self._playwright.chromium.connect_over_cdp(
-            f"wss://connect.steel.dev?apiKey={os.getenv('STEEL_API_KEY')}&sessionId={self.session.id}"
+            f"wss://connect.steel.dev?apiKey={os.getenv('STEEL_API_KEY')}&sessionId={self.session.id}",
+            timeout=60000
         )
         context = browser.contexts[0]
 
-        # Set up page event handlers
+        # Add event listeners for page creation and closure
         context.on("page", self._handle_new_page)
 
-        # Add virtual mouse cursor if enabled
+        # Only add the init script if virtual_mouse is True
         if self.virtual_mouse:
-            context.add_init_script("""
+            context.add_init_script(
+                """
             // Only run in the top frame
             if (window.self === window.top) {
                 function initCursor() {
                     const CURSOR_ID = '__cursor__';
+
+                    // Check if cursor element already exists
                     if (document.getElementById(CURSOR_ID)) return;
 
                     const cursor = document.createElement('div');
@@ -116,12 +123,14 @@ class SteelBrowser(BasePlaywrightComputer):
                     });
 
                     document.body.appendChild(cursor);
+
                     document.addEventListener("mousemove", (e) => {
                         cursor.style.top = e.clientY + "px";
                         cursor.style.left = e.clientX + "px";
                     });
                 }
 
+                // Use requestAnimationFrame for early execution
                 requestAnimationFrame(function checkBody() {
                     if (document.body) {
                         initCursor();
@@ -130,7 +139,8 @@ class SteelBrowser(BasePlaywrightComputer):
                     }
                 });
             }
-            """)
+            """
+            )
 
         page = context.pages[0]
         page.on("close", self._handle_page_close)
@@ -141,13 +151,13 @@ class SteelBrowser(BasePlaywrightComputer):
         return browser, page
 
     def _handle_new_page(self, page: Page):
-        """Handle creation of a new page."""
+        """Handle the creation of a new page."""
         print("New page created")
         self._page = page
         page.on("close", self._handle_page_close)
 
     def _handle_page_close(self, page: Page):
-        """Handle page closure."""
+        """Handle the closure of a page."""
         print("Page closed")
         if self._page == page:
             if self._browser.contexts[0].pages:
@@ -157,7 +167,14 @@ class SteelBrowser(BasePlaywrightComputer):
                 self._page = None
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Clean up resources when exiting."""
+        """
+        Clean up resources when exiting the context manager.
+
+        Args:
+            exc_type: The type of the exception that caused the context to be exited.
+            exc_val: The exception instance that caused the context to be exited.
+            exc_tb: A traceback object encapsulating the call stack at the point where the exception occurred.
+        """
         if self._page:
             self._page.close()
         if self._browser:
@@ -177,16 +194,20 @@ class SteelBrowser(BasePlaywrightComputer):
         Capture a screenshot of the current viewport using CDP.
 
         Returns:
-            str: Base64 encoded screenshot data
+            str: A base64 encoded string of the screenshot.
         """
         try:
+            # Get CDP session from the page
             cdp_session = self._page.context.new_cdp_session(self._page)
-            result = cdp_session.send("Page.captureScreenshot", {
-                "format": "png",
-                "fromSurface": True
-            })
-            return result['data']
+
+            # Capture screenshot using CDP
+            result = cdp_session.send(
+                "Page.captureScreenshot", {"format": "png", "fromSurface": True}
+            )
+
+            return result["data"]
         except PlaywrightError as error:
             print(
-                f"CDP screenshot failed, falling back to standard screenshot: {error}")
-            return super().screenshot()
+                f"CDP screenshot failed, falling back to standard screenshot: {error}"
+            )
+            return super().screenshot() 
